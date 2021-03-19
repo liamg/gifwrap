@@ -10,9 +10,9 @@ deploy:
       secure: "H4jk+hSqPxzyo73VL/VqSphFfahdpEgRVeFPqDsqc7HeebZbCFwtCgu2cUULoJ6KVEFNJ3x1yKkOApEs0Rvl3FKZwFVMkileTmSNXMxR2+gS4M5clIBZdOLasNWrAjwLl8OLTm6G/Qh4YWKs1lB51KI9Cn8Ybn7MzdOJs/LreT7j8luhdhhuP8xSDWwp2Q8tHBkkYMMSjkKaN8PTPoEXk3EHEtHzwmin3jHD36N5iJPAN2BddMFpkmeREzJP5uxNtMB6P+AYtmFhu7mfxyIaMAoinWv1dmP/WtUvKxcO4ckN8Jp8BVti4giIfl3qWBaGb+LssSO8Dn60eE8o3+UbzWQtflBeQUokXvtTZBZBoA2esSL+BlHWNxlCDtM5TrrBkW6gSmbfUibUrgpsYL3EfgRQbLiCTkULZy82KZSUdLlVEiHCS8/RilYRFSK8kUtHpG3vUgnjZ/1n39exAAYzNxcOXod6RYTX7dJ0os6CLZUa/xGGeuNEsoNw5ycxonzF1qVlHnAWOT2vrRarpSMcy6Ij0IdVUY9jvARFhj7x2ZnJh5bftttmgfMIsyqpxjl4RK1qx7S4Z1d36utguBvC3kqBatRSt7LaWCP5YxpHh15k+uclj3aLcdQVCrKFfbTXJoopSEHUUgyxXpstv8NFVEcx120T9i3T+v2rHl1hVXw="
     name: "gifwrap $TRAVIS_TAG"
     file:
-      - bin/darwin-amd64/gifwrap
-      - bin/darwin-arm64/gifwrap
-      - bin/linux-amd64/gifwrap
+      - bin/gifwrap-darwin-amd64
+      - bin/gifwrap-darwin-arm64
+      - bin/gifwrap-linux-amd64
     on:
       repo: liamg/gifwrap
       tags: true
