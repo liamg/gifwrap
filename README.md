@@ -9,7 +9,7 @@ GIFs in your terminal.
 Download the [latest binary](https://github.com/liamg/gifwrap/releases/) or install with Go:
 
 ```bash
-go install github.com/liamg/gifwrap@latest
+go install github.com/liamg/gifwrap/cmd/gifwrap@latest
 ```
 
 ## Usage
