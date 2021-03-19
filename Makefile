@@ -5,12 +5,10 @@ build: test
 	go build ./cmd/gifwrap/ -o bin/gifwrap
 
 build-travis: test
-	mkdir -p bin/linux-amd64/
-	mkdir -p bin/darwin-amd64/
-	mkdir -p bin/darwin-arm64/
-	GOOS=linux  GOARCH=amd64 go build -o bin/linux-amd64/gifwrap  ./cmd/gifwrap
-	GOOS=darwin GOARCH=amd64 go build -o bin/darwin-amd64/gifwrap ./cmd/gifwrap
-	GOOS=darwin GOARCH=arm64 go build -o bin/darwin-arm64/gifwrap ./cmd/gifwrap
+	mkdir -p bin
+	GOOS=linux  GOARCH=amd64 go build -o bin/gifwrap-linux-amd64  ./cmd/gifwrap
+	GOOS=darwin GOARCH=amd64 go build -o bin/gifwrap-darwin-amd64 ./cmd/gifwrap
+	GOOS=darwin GOARCH=arm64 go build -o bin/gifwrap-darwin-arm64 ./cmd/gifwrap
 
 test:
 	go vet ./...
