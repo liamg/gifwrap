@@ -14,6 +14,7 @@ type Renderer struct {
 	image  *gif.GIF
 	width  int
 	height int
+	fill   bool
 }
 
 var ErrQuit = fmt.Errorf("user quit")
@@ -29,6 +30,10 @@ func (r *Renderer) init() error {
 	r.screen = screen
 	r.width, r.height = r.screen.Size()
 	return nil
+}
+
+func (r *Renderer) SetFill(fill bool) {
+	r.fill = fill
 }
 
 func (r *Renderer) close() {
@@ -80,11 +85,29 @@ func (r *Renderer) cycleFrames() error {
 }
 
 func (r *Renderer) drawFrame(img image.Image) error {
+
 	bounds := img.Bounds()
 	width := bounds.Max.X - bounds.Min.X
 	height := bounds.Max.Y - bounds.Min.Y
-	pixPerCellX := width / r.width
-	pixPerCellY := height / r.height
+
+	termWidth := r.width
+	termHeight := r.height
+
+	if !r.fill {
+
+		imgRatio := float64(width) / float64(height)
+		termRatio := float64(r.width) / float64(r.height)
+
+		if termRatio > imgRatio {
+			termWidth = int(float64(termHeight) * imgRatio)
+		} else {
+			termHeight = int(float64(termWidth) / imgRatio)
+		}
+
+	}
+
+	pixPerCellX := width / termWidth
+	pixPerCellY := height / termHeight
 
 	var red uint64
 	var green uint64
@@ -94,13 +117,16 @@ func (r *Renderer) drawFrame(img image.Image) error {
 
 	r.screen.Clear()
 
-	for x := 0; x < r.width; x++ {
-		for y := 0; y < r.height; y++ {
+	for x := 0; x < termWidth; x++ {
+		for y := 0; y < termHeight; y++ {
 			red, green, blue = 0, 0, 0
 			for pX := x * pixPerCellX; pX < (x*pixPerCellX)+pixPerCellX; pX++ {
 				for pY := y * pixPerCellY; pY < (y*pixPerCellY)+pixPerCellY; pY++ {
 					colour := img.At(pX, pY)
 					r, g, b, a := colour.RGBA()
+					if a == 0 {
+						a = 1
+					}
 					red += uint64((r * 255) / a)
 					green += uint64((g * 255) / a)
 					blue += uint64((b * 255) / a)
