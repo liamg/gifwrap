@@ -22,3 +22,7 @@ Flags:
   -f, --fill   Fill the entire terminal with the gif, ignoring aspect ratio
   -h, --help   help for gifwrap
 ```
+
+## Why?
+
+//TODO: Fill this in
