@@ -28,12 +28,13 @@ func main() {
 				renderer, err = ascii.FromFile(arg)
 			}
 
-			renderer.SetFill(enableFill)
-
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 				os.Exit(1)
 			}
+
+			renderer.SetFill(enableFill)
+
 			if err := renderer.Play(); err != nil && err != ascii.ErrQuit {
 				_, _ = fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 				os.Exit(1)

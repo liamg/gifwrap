@@ -2,7 +2,11 @@ default: build
 
 build: test
 	mkdir -p bin
-	go build ./cmd/gifwrap/ -o bin/gifwrap
+	go build -o bin/gifwrap ./cmd/gifwrap/
+
+demo: build
+	mkdir -p bin
+	./bin/gifwrap -f https://media.giphy.com/media/QMHoU66sBXqqLqYvGO/giphy.gif
 
 build-travis: test
 	mkdir -p bin

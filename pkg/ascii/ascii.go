@@ -123,17 +123,27 @@ func (r *Renderer) drawFrame(img image.Image) error {
 			for pX := x * pixPerCellX; pX < (x*pixPerCellX)+pixPerCellX; pX++ {
 				for pY := y * pixPerCellY; pY < (y*pixPerCellY)+pixPerCellY; pY++ {
 					colour := img.At(pX, pY)
-					r, g, b, a := colour.RGBA()
-					if a == 0 {
-						a = 1
+					r, g, b, _ := colour.RGBA()
+					r = r / 0x100
+					g = g / 0x100
+					b = b / 0x100
+					if r > 0xff {
+						r = 0xff
 					}
-					red += uint64((r * 255) / a)
-					green += uint64((g * 255) / a)
-					blue += uint64((b * 255) / a)
+					if g > 0xff {
+						g = 0xff
+					}
+					if b > 0xff {
+						b = 0xff
+					}
+					red += uint64(r)
+					green += uint64(g)
+					blue += uint64(b)
 				}
 			}
 
-			r.screen.SetCell(x, y, tcell.StyleDefault.Background(tcell.NewRGBColor(int32(red/count), int32(green/count), int32(blue/count))), ' ')
+			cr, cg, cb := int32(red/count), int32(green/count), int32(blue/count)
+			r.screen.SetCell(x, y, tcell.StyleDefault.Background(tcell.NewRGBColor(cr, cg, cb)), ' ')
 		}
 	}
 
