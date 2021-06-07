@@ -76,6 +76,12 @@ func (r *Renderer) cycleFrames() error {
 			if ev.Key() == tcell.KeyEscape {
 				return ErrQuit
 			}
+			if ev.Key() == tcell.KeyRune {
+				switch ev.Rune() {
+				case 'q':
+					return ErrQuit
+				}
+			}
 		}
 
 		delay := time.Duration(r.image.Delay[i]) * time.Millisecond * 10
@@ -114,6 +120,9 @@ func (r *Renderer) drawFrame(img image.Image) error {
 	var blue uint64
 
 	count := uint64(pixPerCellX * pixPerCellY)
+	if count == 0 {
+		return nil
+	}
 
 	r.screen.Clear()
 
@@ -123,10 +132,11 @@ func (r *Renderer) drawFrame(img image.Image) error {
 			for pX := x * pixPerCellX; pX < (x*pixPerCellX)+pixPerCellX; pX++ {
 				for pY := y * pixPerCellY; pY < (y*pixPerCellY)+pixPerCellY; pY++ {
 					colour := img.At(pX, pY)
-					r, g, b, _ := colour.RGBA()
-					r = r / 0x100
-					g = g / 0x100
-					b = b / 0x100
+					ir, ig, ib, ia := colour.RGBA()
+					ia = ia / 0xff
+					r := (uint64(ia) * uint64(ir)) / 0xffff
+					g := (uint64(ia) * uint64(ig)) / 0xffff
+					b := (uint64(ia) * uint64(ib)) / 0xffff
 					if r > 0xff {
 						r = 0xff
 					}
@@ -136,9 +146,9 @@ func (r *Renderer) drawFrame(img image.Image) error {
 					if b > 0xff {
 						b = 0xff
 					}
-					red += uint64(r)
-					green += uint64(g)
-					blue += uint64(b)
+					red += r
+					green += g
+					blue += b
 				}
 			}
 
