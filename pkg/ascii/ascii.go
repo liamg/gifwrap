@@ -3,6 +3,7 @@ package ascii
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"image/gif"
 	"time"
 
@@ -15,6 +16,7 @@ type Renderer struct {
 	width  int
 	height int
 	fill   bool
+	canvas map[uint64]struct{ r, g, b int32 }
 }
 
 var ErrQuit = fmt.Errorf("user quit")
@@ -29,6 +31,7 @@ func (r *Renderer) init() error {
 	}
 	r.screen = screen
 	r.width, r.height = r.screen.Size()
+	r.canvas = map[uint64]struct{ r, g, b int32 }{}
 	return nil
 }
 
@@ -64,7 +67,8 @@ func (r *Renderer) PlayOnce() error {
 
 func (r *Renderer) cycleFrames() error {
 	for i, frame := range r.image.Image {
-		if err := r.drawFrame(frame); err != nil {
+
+		if err := r.drawFrame(frame, i); err != nil {
 			return err
 		}
 
@@ -90,11 +94,12 @@ func (r *Renderer) cycleFrames() error {
 	return nil
 }
 
-func (r *Renderer) drawFrame(img image.Image) error {
+func (r *Renderer) drawFrame(img image.Image, i int) error {
 
 	bounds := img.Bounds()
-	width := bounds.Max.X - bounds.Min.X
-	height := bounds.Max.Y - bounds.Min.Y
+	_ = bounds
+	width := r.image.Config.Width
+	height := r.image.Config.Height
 
 	termWidth := r.width
 	termHeight := r.height
@@ -118,25 +123,38 @@ func (r *Renderer) drawFrame(img image.Image) error {
 	var red uint64
 	var green uint64
 	var blue uint64
+	var alpha uint64
 
 	count := uint64(pixPerCellX * pixPerCellY)
 	if count == 0 {
 		return nil
 	}
 
-	r.screen.Clear()
+	//r.screen.Clear()
+
+	var disposal byte
+	if i == 0 {
+		disposal = r.image.Disposal[len(r.image.Image)-1]
+	} else {
+		disposal = r.image.Disposal[i-1]
+	}
+
+	background := r.image.Config.ColorModel.(color.Palette)[r.image.BackgroundIndex]
 
 	for x := 0; x < termWidth; x++ {
 		for y := 0; y < termHeight; y++ {
-			red, green, blue = 0, 0, 0
+			red, green, blue, alpha = 0, 0, 0, 0
 			for pX := x * pixPerCellX; pX < (x*pixPerCellX)+pixPerCellX; pX++ {
 				for pY := y * pixPerCellY; pY < (y*pixPerCellY)+pixPerCellY; pY++ {
-					colour := img.At(pX, pY)
+					if pX < bounds.Min.X || pY < bounds.Min.Y {
+						continue
+					}
+					colour := img.At(pX-bounds.Min.X, pY-bounds.Min.Y) //-bounds.Min.X, pY-bounds.Min.Y)
 					ir, ig, ib, ia := colour.RGBA()
-					ia = ia / 0xff
-					r := (uint64(ia) * uint64(ir)) / 0xffff
-					g := (uint64(ia) * uint64(ig)) / 0xffff
-					b := (uint64(ia) * uint64(ib)) / 0xffff
+					a := ia / 0xff
+					r := ir / 0xff
+					g := ig / 0xff
+					b := ib / 0xff
 					if r > 0xff {
 						r = 0xff
 					}
@@ -146,14 +164,42 @@ func (r *Renderer) drawFrame(img image.Image) error {
 					if b > 0xff {
 						b = 0xff
 					}
-					red += r
-					green += g
-					blue += b
+					if a > 0xff {
+						a = 0xff
+					}
+					red += uint64(r)
+					green += uint64(g)
+					blue += uint64(b)
+					alpha += uint64(a)
 				}
 			}
 
-			cr, cg, cb := int32(red/count), int32(green/count), int32(blue/count)
-			r.screen.SetCell(x, y, tcell.StyleDefault.Background(tcell.NewRGBColor(cr, cg, cb)), ' ')
+			cr, cg, cb, ca := int32(red/count), int32(green/count), int32(blue/count), int32(alpha/count)
+			var force bool
+			if disposal == gif.DisposalBackground {
+				cr, cg, cb, _ := background.RGBA()
+				r.screen.SetCell(x, y, tcell.StyleDefault.Background(tcell.NewRGBColor(int32(cr), int32(cg), int32(cb))), '?')
+			} else if disposal == gif.DisposalPrevious {
+				// lol?
+				force = true
+				//r.screen.SetCell(x, y, tcell.StyleDefault.Foreground(tcell.NewRGBColor(255, 0, 0)), '7')
+			} else {
+				//r.screen.SetCell(x, y, tcell.StyleDefault.Foreground(tcell.NewRGBColor(0, 255, 0)), '8')
+			}
+			// if prev, found := r.canvas[(uint64(x)<<16)+uint64(y)]; found && ca < 0x16 {
+			// 	//				cr = (int32((uint64(cr) * uint64(ca)) / 0xff)) + (int32((uint64(prev.r) * (0xff - uint64(ca))) / 0xff))
+			// 	//		cg = (int32((uint64(cg) * uint64(ca)) / 0xff)) + (int32((uint64(prev.g) * (0xff - uint64(ca))) / 0xff))
+			// 	//cb = (int32((uint64(cb) * uint64(ca)) / 0xff)) + (int32((uint64(prev.b) * (0xff - uint64(ca))) / 0xff))
+			// 	cr = prev.r
+			// 	cg = prev.g
+			// 	cb = prev.b
+			// 	_ = ca
+			// }
+
+			r.canvas[(uint64(x)<<16)+uint64(y)] = struct{ r, g, b int32 }{cr, cg, cb}
+			if ca > 0x80 || force {
+				r.screen.SetCell(x, y, tcell.StyleDefault.Background(tcell.NewRGBColor(cr, cg, cb)), ' ')
+			}
 		}
 	}
 
