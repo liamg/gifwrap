@@ -3,6 +3,7 @@ package ascii
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"image/gif"
 	"time"
 
@@ -15,6 +16,8 @@ type Renderer struct {
 	width  int
 	height int
 	fill   bool
+	ppcX   int
+	ppcY   int
 }
 
 var ErrQuit = fmt.Errorf("user quit")
@@ -64,7 +67,8 @@ func (r *Renderer) PlayOnce() error {
 
 func (r *Renderer) cycleFrames() error {
 	for i, frame := range r.image.Image {
-		if err := r.drawFrame(frame); err != nil {
+
+		if err := r.drawFrame(frame, i); err != nil {
 			return err
 		}
 
@@ -90,11 +94,77 @@ func (r *Renderer) cycleFrames() error {
 	return nil
 }
 
-func (r *Renderer) drawFrame(img image.Image) error {
+func (r *Renderer) colourAtChar(i int, x int, y int, bounds image.Rectangle, disposal byte) (int32, int32, int32, bool) {
+
+	var count uint64
+	var tmpColor color.Color
+	var ir, ig, ib, ia uint32
+	var red, green, blue uint64 = 0, 0, 0
+
+	background := r.image.Config.ColorModel.(color.Palette)[r.image.BackgroundIndex]
+
+	for pX := x * r.ppcX; pX < (x*r.ppcX)+r.ppcX; pX++ {
+		for pY := y * r.ppcY; pY < (y*r.ppcY)+r.ppcY; pY++ {
+			if pX < bounds.Min.X || pY < bounds.Min.Y || pX > bounds.Max.X || pY > bounds.Max.Y {
+				continue
+			}
+
+			ia = 0xffff
+
+			tmpColor = r.image.Image[i].At(pX, pY)
+			ir, ig, ib, ia = tmpColor.RGBA()
+
+			if ia < 0x8888 {
+				switch disposal {
+				case gif.DisposalBackground:
+					ir, ig, ib, ia = background.RGBA()
+				case gif.DisposalPrevious:
+					for index := i - 2; ia < 0x8888 && index >= 0; index-- {
+						tmpColor = r.image.Image[index].At(pX, pY)
+						ir, ig, ib, ia = tmpColor.RGBA()
+					}
+				case gif.DisposalNone:
+					continue
+				}
+			}
+
+			if ia < 0x8888 {
+				continue
+			}
+
+			r := ir / 0xff
+			g := ig / 0xff
+			b := ib / 0xff
+
+			if r > 0xff {
+				r = 0xff
+			}
+			if g > 0xff {
+				g = 0xff
+			}
+			if b > 0xff {
+				b = 0xff
+			}
+			red += uint64(r)
+			green += uint64(g)
+			blue += uint64(b)
+			count++
+		}
+	}
+
+	if count == 0 {
+		return 0, 0, 0, true
+	}
+
+	return int32(red / count), int32(green / count), int32(blue / count), count < (uint64(r.ppcX)*uint64(r.ppcY))/2
+}
+
+func (r *Renderer) drawFrame(img image.Image, i int) error {
 
 	bounds := img.Bounds()
-	width := bounds.Max.X - bounds.Min.X
-	height := bounds.Max.Y - bounds.Min.Y
+	_ = bounds
+	width := r.image.Config.Width
+	height := r.image.Config.Height
 
 	termWidth := r.width
 	termHeight := r.height
@@ -112,47 +182,30 @@ func (r *Renderer) drawFrame(img image.Image) error {
 
 	}
 
-	pixPerCellX := width / termWidth
-	pixPerCellY := height / termHeight
+	r.ppcX = width / termWidth
+	r.ppcY = height / termHeight
 
-	var red uint64
-	var green uint64
-	var blue uint64
-
-	count := uint64(pixPerCellX * pixPerCellY)
+	count := uint64(r.ppcX * r.ppcY)
 	if count == 0 {
 		return nil
 	}
 
-	r.screen.Clear()
+	var disposal byte
+	if i == 0 {
+		disposal = r.image.Disposal[len(r.image.Image)-1]
+	} else {
+		disposal = r.image.Disposal[i-1]
+	}
+
+	var cr, cg, cb int32
+	var skip bool
 
 	for x := 0; x < termWidth; x++ {
 		for y := 0; y < termHeight; y++ {
-			red, green, blue = 0, 0, 0
-			for pX := x * pixPerCellX; pX < (x*pixPerCellX)+pixPerCellX; pX++ {
-				for pY := y * pixPerCellY; pY < (y*pixPerCellY)+pixPerCellY; pY++ {
-					colour := img.At(pX, pY)
-					ir, ig, ib, ia := colour.RGBA()
-					ia = ia / 0xff
-					r := (uint64(ia) * uint64(ir)) / 0xffff
-					g := (uint64(ia) * uint64(ig)) / 0xffff
-					b := (uint64(ia) * uint64(ib)) / 0xffff
-					if r > 0xff {
-						r = 0xff
-					}
-					if g > 0xff {
-						g = 0xff
-					}
-					if b > 0xff {
-						b = 0xff
-					}
-					red += r
-					green += g
-					blue += b
-				}
+			cr, cg, cb, skip = r.colourAtChar(i, x, y, bounds, disposal)
+			if skip {
+				continue
 			}
-
-			cr, cg, cb := int32(red/count), int32(green/count), int32(blue/count)
 			r.screen.SetCell(x, y, tcell.StyleDefault.Background(tcell.NewRGBColor(cr, cg, cb)), ' ')
 		}
 	}
