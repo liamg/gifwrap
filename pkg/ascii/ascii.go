@@ -16,7 +16,8 @@ type Renderer struct {
 	width  int
 	height int
 	fill   bool
-	canvas map[uint64]struct{ r, g, b int32 }
+	ppcX   int
+	ppcY   int
 }
 
 var ErrQuit = fmt.Errorf("user quit")
@@ -31,7 +32,6 @@ func (r *Renderer) init() error {
 	}
 	r.screen = screen
 	r.width, r.height = r.screen.Size()
-	r.canvas = map[uint64]struct{ r, g, b int32 }{}
 	return nil
 }
 
@@ -94,6 +94,71 @@ func (r *Renderer) cycleFrames() error {
 	return nil
 }
 
+func (r *Renderer) colourAtChar(i int, x int, y int, bounds image.Rectangle, disposal byte) (int32, int32, int32, bool) {
+
+	var count uint64
+	var tmpColor color.Color
+	var ir, ig, ib, ia uint32
+	var red, green, blue uint64 = 0, 0, 0
+
+	background := r.image.Config.ColorModel.(color.Palette)[r.image.BackgroundIndex]
+
+	for pX := x * r.ppcX; pX < (x*r.ppcX)+r.ppcX; pX++ {
+		for pY := y * r.ppcY; pY < (y*r.ppcY)+r.ppcY; pY++ {
+			if pX < bounds.Min.X || pY < bounds.Min.Y || pX > bounds.Max.X || pY > bounds.Max.Y {
+				continue
+			}
+
+			ia = 0xffff
+
+			tmpColor = r.image.Image[i].At(pX, pY)
+			ir, ig, ib, ia = tmpColor.RGBA()
+
+			if ia < 0x8888 {
+				switch disposal {
+				case gif.DisposalBackground:
+					ir, ig, ib, ia = background.RGBA()
+				case gif.DisposalPrevious:
+					for index := i - 2; ia < 0x8888 && index >= 0; index-- {
+						tmpColor = r.image.Image[index].At(pX, pY)
+						ir, ig, ib, ia = tmpColor.RGBA()
+					}
+				case gif.DisposalNone:
+					continue
+				}
+			}
+
+			if ia < 0x8888 {
+				continue
+			}
+
+			r := ir / 0xff
+			g := ig / 0xff
+			b := ib / 0xff
+
+			if r > 0xff {
+				r = 0xff
+			}
+			if g > 0xff {
+				g = 0xff
+			}
+			if b > 0xff {
+				b = 0xff
+			}
+			red += uint64(r)
+			green += uint64(g)
+			blue += uint64(b)
+			count++
+		}
+	}
+
+	if count == 0 {
+		return 0, 0, 0, true
+	}
+
+	return int32(red / count), int32(green / count), int32(blue / count), count < (uint64(r.ppcX)*uint64(r.ppcY))/2
+}
+
 func (r *Renderer) drawFrame(img image.Image, i int) error {
 
 	bounds := img.Bounds()
@@ -117,20 +182,13 @@ func (r *Renderer) drawFrame(img image.Image, i int) error {
 
 	}
 
-	pixPerCellX := width / termWidth
-	pixPerCellY := height / termHeight
+	r.ppcX = width / termWidth
+	r.ppcY = height / termHeight
 
-	var red uint64
-	var green uint64
-	var blue uint64
-	var alpha uint64
-
-	count := uint64(pixPerCellX * pixPerCellY)
+	count := uint64(r.ppcX * r.ppcY)
 	if count == 0 {
 		return nil
 	}
-
-	//r.screen.Clear()
 
 	var disposal byte
 	if i == 0 {
@@ -139,67 +197,16 @@ func (r *Renderer) drawFrame(img image.Image, i int) error {
 		disposal = r.image.Disposal[i-1]
 	}
 
-	background := r.image.Config.ColorModel.(color.Palette)[r.image.BackgroundIndex]
+	var cr, cg, cb int32
+	var skip bool
 
 	for x := 0; x < termWidth; x++ {
 		for y := 0; y < termHeight; y++ {
-			red, green, blue, alpha = 0, 0, 0, 0
-			for pX := x * pixPerCellX; pX < (x*pixPerCellX)+pixPerCellX; pX++ {
-				for pY := y * pixPerCellY; pY < (y*pixPerCellY)+pixPerCellY; pY++ {
-					if pX < bounds.Min.X || pY < bounds.Min.Y {
-						continue
-					}
-					colour := img.At(pX-bounds.Min.X, pY-bounds.Min.Y) //-bounds.Min.X, pY-bounds.Min.Y)
-					ir, ig, ib, ia := colour.RGBA()
-					a := ia / 0xff
-					r := ir / 0xff
-					g := ig / 0xff
-					b := ib / 0xff
-					if r > 0xff {
-						r = 0xff
-					}
-					if g > 0xff {
-						g = 0xff
-					}
-					if b > 0xff {
-						b = 0xff
-					}
-					if a > 0xff {
-						a = 0xff
-					}
-					red += uint64(r)
-					green += uint64(g)
-					blue += uint64(b)
-					alpha += uint64(a)
-				}
+			cr, cg, cb, skip = r.colourAtChar(i, x, y, bounds, disposal)
+			if skip {
+				continue
 			}
-
-			cr, cg, cb, ca := int32(red/count), int32(green/count), int32(blue/count), int32(alpha/count)
-			var force bool
-			if disposal == gif.DisposalBackground {
-				cr, cg, cb, _ := background.RGBA()
-				r.screen.SetCell(x, y, tcell.StyleDefault.Background(tcell.NewRGBColor(int32(cr), int32(cg), int32(cb))), '?')
-			} else if disposal == gif.DisposalPrevious {
-				// lol?
-				force = true
-				//r.screen.SetCell(x, y, tcell.StyleDefault.Foreground(tcell.NewRGBColor(255, 0, 0)), '7')
-			} else {
-				//r.screen.SetCell(x, y, tcell.StyleDefault.Foreground(tcell.NewRGBColor(0, 255, 0)), '8')
-			}
-			// if prev, found := r.canvas[(uint64(x)<<16)+uint64(y)]; found && ca < 0x16 {
-			// 	//				cr = (int32((uint64(cr) * uint64(ca)) / 0xff)) + (int32((uint64(prev.r) * (0xff - uint64(ca))) / 0xff))
-			// 	//		cg = (int32((uint64(cg) * uint64(ca)) / 0xff)) + (int32((uint64(prev.g) * (0xff - uint64(ca))) / 0xff))
-			// 	//cb = (int32((uint64(cb) * uint64(ca)) / 0xff)) + (int32((uint64(prev.b) * (0xff - uint64(ca))) / 0xff))
-			// 	cr = prev.r
-			// 	cg = prev.g
-			// 	cb = prev.b
-			// 	_ = ca
-			// }
-
-			r.canvas[(uint64(x)<<16)+uint64(y)] = struct{ r, g, b int32 }{cr, cg, cb}
-			if ca > 0x80 || force {
-				r.screen.SetCell(x, y, tcell.StyleDefault.Background(tcell.NewRGBColor(cr, cg, cb)), ' ')
-			}
+			r.screen.SetCell(x, y, tcell.StyleDefault.Background(tcell.NewRGBColor(cr, cg, cb)), ' ')
 		}
 	}
 
