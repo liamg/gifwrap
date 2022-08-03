@@ -11,19 +11,20 @@ import (
 )
 
 var enableFill bool
+var allowBadCert bool
 
 func main() {
 
 	var rootCmd = &cobra.Command{
 		Use:  "gifwrap [url-or-path]",
 		Args: cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, args []string) {
 
 			var renderer *ascii.Renderer
 			var err error
 			arg := args[0]
 			if strings.Contains(arg, "://") {
-				renderer, err = ascii.FromURL(arg)
+				renderer, err = ascii.FromURL(arg, allowBadCert)
 			} else {
 				renderer, err = ascii.FromFile(arg)
 			}
@@ -41,6 +42,7 @@ func main() {
 			}
 		},
 	}
+	rootCmd.Flags().BoolVarP(&allowBadCert, "allow-bad-cert", "k", false, "Allow bad TLS certificates when retrieving remote GIFs")
 	rootCmd.Flags().BoolVarP(&enableFill, "fill", "f", enableFill, "Fill the entire terminal with the gif, ignoring aspect ratio")
 	_ = rootCmd.Execute()
 }

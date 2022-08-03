@@ -1,6 +1,6 @@
 module github.com/liamg/gifwrap
 
-go 1.16
+go 1.18
 
 require (
 	github.com/gdamore/tcell/v2 v2.2.0
